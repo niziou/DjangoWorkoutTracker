@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Workout Logger{% endblock %}</title>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f6f4;
+        --surface: #ffffff;
+        --ink: #1f2937;
+        --muted: #6b7280;
+        --accent: #1d4ed8;
+        --border: #e5e7eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      header a {
+        color: var(--ink);
+        text-decoration: none;
+        font-weight: 600;
+        margin-right: 12px;
+      }
+      main {
+        max-width: 900px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--ink);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn.secondary {
+        background: transparent;
+        color: var(--ink);
+      }
+      .btn.small {
+        padding: 6px 10px;
+        font-size: 13px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      input, textarea, select {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 14px;
+        background: #fff;
+      }
+      textarea { min-height: 80px; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .row > * { flex: 1; }
+      .error {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .table th, .table td {
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+      }
+      .set-pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #3730a3;
+        font-size: 12px;
+        margin: 2px 4px 2px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <a href="{% url 'workout-list' %}">Workout Logger</a>
+        {% if user.is_authenticated %}
+          <a href="{% url 'workout-create' %}">Add Training</a>
+        {% endif %}
+      </div>
+      <div>
+        {% if user.is_authenticated %}
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="btn secondary small" type="submit">Log out</button>
+          </form>
+        {% else %}
+          <a class="btn small" href="{% url 'login' %}">Log in</a>
+        {% endif %}
+      </div>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

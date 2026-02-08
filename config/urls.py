@@ -17,6 +17,8 @@ router.register("workouts", WorkoutSessionViewSet, basename="workout-session")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("", include("workouts.web_urls")),
     path(
         "api/",
         include(

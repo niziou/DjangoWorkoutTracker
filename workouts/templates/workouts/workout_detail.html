@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Workout {{ workout.performed_at|date:"Y-m-d" }}{% endblock %}
+
+{% block content %}
+  <div class="card">
+    <h2 style="margin-top: 0;">Workout</h2>
+    <div><strong>Date:</strong> {{ workout.performed_at|date:"Y-m-d H:i" }}</div>
+    <div><strong>Template:</strong> {{ workout.template_name|default:"-" }}</div>
+    <div><strong>Notes:</strong> {{ workout.notes|default:"" }}</div>
+  </div>
+
+  {% for exercise in workout.exercises.all %}
+    <div class="card">
+      <h3 style="margin-top: 0;">{{ exercise.exercise.name }}</h3>
+      {% if exercise.notes %}
+        <div class="muted">{{ exercise.notes }}</div>
+      {% endif %}
+      <div>
+        {% for set in exercise.sets.all %}
+          {% if set.duration_seconds %}
+            <span class="set-pill">Set {{ set.set_index }}: {{ set.duration_seconds }}s</span>
+          {% else %}
+            <span class="set-pill">Set {{ set.set_index }}: {{ set.reps }} reps @ {{ set.weight_kg }}kg</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <div class="card muted">No exercises recorded.</div>
+  {% endfor %}
+{% endblock %}

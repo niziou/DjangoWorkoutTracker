@@ -6,18 +6,14 @@ from typing import Optional
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status, viewsets
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import WorkoutSession
 from .serializers import WorkoutSessionSerializer
-from .services import (
-    calculate_tonnage,
-    count_sets_by_muscle_group,
-    get_best_set_for_exercise,
-    get_default_user,
-)
+from .services import calculate_tonnage, count_sets_by_muscle_group, get_best_set_for_exercise
 
 
 def _parse_iso_value(raw_value: Optional[str]) -> Optional[date | datetime]:
@@ -46,9 +42,10 @@ def _normalize_for_filter(value: Optional[date | datetime], *, is_end: bool = Fa
 class WorkoutSessionViewSet(viewsets.ModelViewSet):
     serializer_class = WorkoutSessionSerializer
     http_method_names = ["get", "post", "head", "options"]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = get_default_user(self.request.user)
+        user = self.request.user
         queryset = (
             WorkoutSession.objects.filter(user=user)
             .prefetch_related("exercises__sets", "exercises__exercise")
@@ -71,6 +68,8 @@ class WorkoutSessionViewSet(viewsets.ModelViewSet):
 
 
 class TonnageStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request: Request) -> Response:
         raw_from = request.query_params.get("from")
         raw_to = request.query_params.get("to")
@@ -83,7 +82,7 @@ class TonnageStatsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user = get_default_user(request.user)
+        user = request.user
         total = calculate_tonnage(user, date_from, date_to)
         return Response(
             {
@@ -95,6 +94,8 @@ class TonnageStatsView(APIView):
 
 
 class BestExerciseView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request: Request) -> Response:
         exercise_id = request.query_params.get("exercise_id")
         if not exercise_id:
@@ -115,7 +116,7 @@ class BestExerciseView(APIView):
         date_from = _parse_iso_value(raw_from)
         date_to = _parse_iso_value(raw_to)
 
-        user = get_default_user(request.user)
+        user = request.user
         best = get_best_set_for_exercise(user, exercise_id_int, date_from, date_to)
         if not best:
             return Response({"detail": "No matching sets found."}, status=status.HTTP_404_NOT_FOUND)
@@ -137,6 +138,8 @@ class BestExerciseView(APIView):
 
 
 class SetsByMuscleGroupView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request: Request) -> Response:
         raw_from = request.query_params.get("from")
         raw_to = request.query_params.get("to")
@@ -149,7 +152,7 @@ class SetsByMuscleGroupView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user = get_default_user(request.user)
+        user = request.user
         counts = count_sets_by_muscle_group(user, date_from, date_to)
         return Response({"from": raw_from, "to": raw_to, "groups": counts})
 

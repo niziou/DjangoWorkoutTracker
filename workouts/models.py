@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils.text import slugify
 
+from .utils import normalize_text
+
 User = get_user_model()
 
 
@@ -41,6 +43,24 @@ class Exercise(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class ExerciseAlias(models.Model):
+    exercise = models.ForeignKey(Exercise, on_delete=models.CASCADE, related_name="aliases")
+    alias: str = models.CharField(max_length=100)
+    normalized_alias: str = models.CharField(max_length=100, unique=True, db_index=True)
+    created_at: Any = models.DateTimeField(auto_now_add=True)
+    updated_at: Any = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["alias"]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        self.normalized_alias = normalize_text(self.alias)
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.alias} -> {self.exercise.name}"
 
 
 class WorkoutSession(models.Model):
@@ -102,3 +122,12 @@ class PerformedSet(models.Model):
 
     def __str__(self) -> str:
         return f"Set #{self.set_index} for {self.performed_exercise}"
+
+
+class WorkoutDraft(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="workout_draft")
+    payload: Any = models.JSONField(default=dict)
+    updated_at: Any = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Draft for {self.user}"

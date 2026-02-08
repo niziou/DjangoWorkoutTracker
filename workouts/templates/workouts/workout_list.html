@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Your Workouts{% endblock %}
+
+{% block content %}
+  <div class="card">
+    <div class="row" style="align-items: center;">
+      <div>
+        <h2 style="margin: 0;">Your Workouts</h2>
+        <div class="muted">Latest sessions first.</div>
+      </div>
+      <div style="text-align: right;">
+        <a class="btn" href="{% url 'workout-create' %}">Add Training</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    {% if workouts %}
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Template</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for workout in workouts %}
+            <tr>
+              <td>
+                <a href="{% url 'workout-detail' workout.pk %}">
+                  {{ workout.performed_at|date:"Y-m-d H:i" }}
+                </a>
+              </td>
+              <td>{{ workout.template_name|default:"-" }}</td>
+              <td>{{ workout.notes|default:"" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No workouts yet. Add your first session.</p>
+    {% endif %}
+  </div>
+{% endblock %}

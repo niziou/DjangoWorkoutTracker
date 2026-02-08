@@ -6,8 +6,14 @@ from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 
-from workouts.models import MuscleGroup
-from workouts.services import calculate_tonnage, count_sets_by_muscle_group, get_best_set_for_exercise
+from workouts.models import ExerciseAlias, MuscleGroup
+from workouts.services import (
+    calculate_tonnage,
+    count_sets_by_muscle_group,
+    get_best_set_for_exercise,
+    parse_entries,
+)
+from workouts.utils import normalize_text
 from workouts.tests.factories import (
     add_performed_exercise,
     create_exercise,
@@ -81,3 +87,32 @@ class ServiceTests(TestCase):
         counts = count_sets_by_muscle_group(self.user, self.now.date(), self.now.date())
         self.assertEqual(counts[MuscleGroup.LEGS], 2)
         self.assertEqual(counts[MuscleGroup.CHEST], 1)
+
+    def test_parse_entries_weight_and_time(self) -> None:
+        bench = create_exercise("Bench Press", muscle_group=MuscleGroup.CHEST)
+        hollow = create_exercise("Hollow Hold", muscle_group=MuscleGroup.CORE, is_bodyweight=True)
+
+        ExerciseAlias.objects.create(
+            exercise=bench,
+            alias="bench press",
+            normalized_alias=normalize_text("bench press"),
+        )
+        ExerciseAlias.objects.create(
+            exercise=hollow,
+            alias="hollow hold",
+            normalized_alias=normalize_text("hollow hold"),
+        )
+
+        exercises_payload, errors = parse_entries(
+            ["3x5 bench press 75kg", "3x30s hollow hold"]
+        )
+        self.assertFalse(errors)
+        self.assertEqual(len(exercises_payload), 2)
+        self.assertEqual(exercises_payload[0]["sets"][0]["reps"], 5)
+        self.assertEqual(exercises_payload[1]["sets"][0]["duration_seconds"], 30)
+
+    def test_parse_entries_creates_unknown_exercise(self) -> None:
+        exercises_payload, errors = parse_entries(["3x10 Seated Cable Row 50kg"])
+        self.assertFalse(errors)
+        self.assertEqual(len(exercises_payload), 1)
+        self.assertEqual(exercises_payload[0]["exercise"].slug, "seated-cable-row")

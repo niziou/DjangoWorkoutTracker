@@ -4,9 +4,10 @@ from typing import Any
 
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
-from .models import Exercise, PerformedExercise, PerformedSet, WorkoutSession
-from .services import create_workout_from_payload, get_default_user
+from .models import PerformedExercise, PerformedSet, WorkoutSession
+from .services import create_workout_from_payload
 
 User = get_user_model()
 
@@ -56,7 +57,9 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict[str, Any]) -> WorkoutSession:
         exercises_data = validated_data.pop("exercises", [])
         request = self.context.get("request")
-        user: User = get_default_user(request.user if request else None)
+        if not request or not request.user.is_authenticated:
+            raise PermissionDenied("Authentication required.")
+        user: User = request.user
 
         payload = {**validated_data, "exercises": exercises_data}
         return create_workout_from_payload(user, payload)

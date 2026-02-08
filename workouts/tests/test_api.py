@@ -20,6 +20,7 @@ class WorkoutAPITests(APITestCase):
     def setUp(self) -> None:
         self.user = create_user()
         self.exercise = create_exercise("Back Squat", muscle_group=MuscleGroup.LEGS)
+        self.client.force_authenticate(user=self.user)
 
     def test_post_workout_creates_nested_objects(self) -> None:
         performed_at = timezone.now().isoformat()

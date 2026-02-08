@@ -1,27 +1,38 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
+import re
 from typing import Any, Optional
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, ExpressionWrapper, Sum
 from django.utils import timezone
+from django.utils.text import slugify
 
-from .models import Exercise, MuscleGroup, PerformedExercise, PerformedSet, WorkoutSession
+from .models import Exercise, ExerciseAlias, MuscleGroup, PerformedExercise, PerformedSet, WorkoutSession
+from .utils import normalize_text
 
 User = get_user_model()
 
+class QuickEntryParseError(ValueError):
+    pass
 
-def get_default_user(user: Optional[User]) -> User:
-    """Return provided user or a singleton default user."""
-    if user and user.is_authenticated:
-        return user
-    existing_user = User.objects.first()
-    if existing_user:
-        return existing_user
-    return User.objects.create_user(username="default")
+
+@dataclass(frozen=True)
+class ParsedSet:
+    weight_kg: Decimal | None
+    reps: int | None
+    duration_seconds: int | None
+    is_warmup: bool = False
+
+
+@dataclass(frozen=True)
+class ParsedExerciseEntry:
+    exercise: Exercise
+    sets: list[ParsedSet]
 
 
 def _normalize_start(value: date | datetime) -> datetime:
@@ -59,6 +70,143 @@ def create_workout_from_payload(user: User, data: dict[str, Any]) -> WorkoutSess
                     performed_exercise=performed_exercise, **set_data
                 )
     return session
+
+
+_WEIGHT_RE = re.compile(
+    r"^\s*(?P<sets>\d+)\s*x\s*(?P<reps>\d+)\s+(?P<exercise>.+?)\s+(?P<weight>\d+(?:[.,]\d+)?)\s*(kg)?\s*$",
+    re.IGNORECASE,
+)
+_TIME_RE = re.compile(
+    r"^\s*(?P<sets>\d+)\s*x\s*(?P<duration>\d+)\s*(s|sec|secs|second|seconds)\s+(?P<exercise>.+?)\s*$",
+    re.IGNORECASE,
+)
+_BODYWEIGHT_RE = re.compile(
+    r"^\s*(?P<sets>\d+)\s*x\s*(?P<reps>\d+)\s+(?P<exercise>.+?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def resolve_exercise(raw_name: str, *, is_bodyweight_hint: bool | None = None) -> Exercise:
+    normalized = normalize_text(raw_name)
+    alias = (
+        ExerciseAlias.objects.select_related("exercise")
+        .filter(normalized_alias=normalized)
+        .first()
+    )
+    if alias:
+        return alias.exercise
+
+    slug = slugify(raw_name)
+    exercise = Exercise.objects.filter(slug=slug).first()
+    if exercise:
+        return exercise
+
+    exercise = Exercise.objects.filter(name__iexact=raw_name.strip()).first()
+    if exercise:
+        return exercise
+
+    name = raw_name.strip()
+    if not name:
+        raise QuickEntryParseError("Exercise name is missing.")
+
+    is_bodyweight = bool(is_bodyweight_hint) if is_bodyweight_hint is not None else False
+    exercise = Exercise.objects.create(
+        name=name,
+        slug=slugify(name),
+        primary_muscle_group=MuscleGroup.OTHER,
+        is_bodyweight=is_bodyweight,
+    )
+    ExerciseAlias.objects.create(
+        exercise=exercise,
+        alias=name,
+        normalized_alias=normalized,
+    )
+    return exercise
+
+
+def _build_sets(count: int, *, weight: Decimal | None, reps: int | None, duration: int | None) -> list[ParsedSet]:
+    return [
+        ParsedSet(weight_kg=weight, reps=reps, duration_seconds=duration, is_warmup=False)
+        for _ in range(count)
+    ]
+
+
+def parse_quick_entry(raw_entry: str) -> ParsedExerciseEntry:
+    raw_entry = raw_entry.strip()
+    if not raw_entry:
+        raise QuickEntryParseError("Empty entry.")
+
+    match_time = _TIME_RE.match(raw_entry)
+    if match_time:
+        sets = int(match_time.group("sets"))
+        duration = int(match_time.group("duration"))
+        exercise_name = match_time.group("exercise")
+        exercise = resolve_exercise(exercise_name, is_bodyweight_hint=True)
+        return ParsedExerciseEntry(exercise=exercise, sets=_build_sets(sets, weight=None, reps=None, duration=duration))
+
+    match_weight = _WEIGHT_RE.match(raw_entry)
+    if match_weight:
+        sets = int(match_weight.group("sets"))
+        reps = int(match_weight.group("reps"))
+        weight_raw = match_weight.group("weight").replace(",", ".")
+        weight = Decimal(weight_raw)
+        exercise_name = match_weight.group("exercise")
+        exercise = resolve_exercise(exercise_name, is_bodyweight_hint=False)
+        return ParsedExerciseEntry(exercise=exercise, sets=_build_sets(sets, weight=weight, reps=reps, duration=None))
+
+    match_bodyweight = _BODYWEIGHT_RE.match(raw_entry)
+    if match_bodyweight:
+        sets = int(match_bodyweight.group("sets"))
+        reps = int(match_bodyweight.group("reps"))
+        exercise_name = match_bodyweight.group("exercise")
+        exercise = resolve_exercise(exercise_name, is_bodyweight_hint=True)
+        if not exercise.is_bodyweight:
+            raise QuickEntryParseError(
+                f"Missing weight for '{exercise.name}'. Use format like '3x5 {exercise.name} 75kg'."
+            )
+        return ParsedExerciseEntry(
+            exercise=exercise,
+            sets=_build_sets(sets, weight=Decimal("0"), reps=reps, duration=None),
+        )
+
+    raise QuickEntryParseError(
+        "Unsupported format. Use '3x5 bench press 75kg' or '3x30s hollow hold'."
+    )
+
+
+def parse_entries(entries: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    exercises_payload: list[dict[str, Any]] = []
+    errors: list[str] = []
+    order_index = 1
+    for raw_entry in entries:
+        if not raw_entry or not raw_entry.strip():
+            continue
+        try:
+            parsed = parse_quick_entry(raw_entry)
+        except QuickEntryParseError as exc:
+            errors.append(f"{raw_entry}: {exc}")
+            continue
+
+        sets_payload = [
+            {
+                "set_index": idx + 1,
+                "weight_kg": parsed_set.weight_kg,
+                "reps": parsed_set.reps,
+                "duration_seconds": parsed_set.duration_seconds,
+                "is_warmup": parsed_set.is_warmup,
+            }
+            for idx, parsed_set in enumerate(parsed.sets)
+        ]
+        exercises_payload.append(
+            {
+                "exercise": parsed.exercise,
+                "order_index": order_index,
+                "notes": "",
+                "sets": sets_payload,
+            }
+        )
+        order_index += 1
+    return exercises_payload, errors
 
 
 def calculate_tonnage(user: User, date_from: date | datetime, date_to: date | datetime) -> Decimal:

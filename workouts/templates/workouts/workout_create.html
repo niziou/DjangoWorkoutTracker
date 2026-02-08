@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Add Training{% endblock %}
+
+{% block content %}
+  {{ draft_payload|json_script:"draft-payload" }}
+  <div class="card" x-data="workoutForm(getDraftPayload())" x-init="init()">
+    <h2 style="margin-top: 0;">Add Training</h2>
+
+    {% if errors %}
+      <div class="error">
+        <strong>Could not save:</strong>
+        <ul>
+          {% for error in errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="field">
+        <label for="performed_at">Performed at</label>
+        <input type="datetime-local" id="performed_at" name="performed_at" x-model="performedAt">
+      </div>
+      <div class="field">
+        <label for="template_name">Template (optional)</label>
+        <input type="text" id="template_name" name="template_name" x-model="templateName">
+      </div>
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" x-model="notes"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Quick entries</label>
+        <div class="muted">Format: <code>3x5 bench press 75kg</code> or <code>3x30s hollow hold</code></div>
+      </div>
+
+      <template x-for="(entry, index) in entries" :key="index">
+        <div class="row" style="margin-bottom: 10px;">
+          <input
+            type="text"
+            x-model="entries[index]"
+            :placeholder="`Entry #${index + 1}`"
+          >
+          <button class="btn secondary small" type="button" @click="removeRow(index)">Remove</button>
+        </div>
+      </template>
+
+      <button class="btn secondary" type="button" @click="addRow()">+ Add row</button>
+
+      <input type="hidden" name="entries_json" :value="JSON.stringify(entries)">
+
+      <div style="margin-top: 16px;">
+        <button class="btn" type="submit">Save workout</button>
+        <span class="muted" x-show="saving">Saving draft...</span>
+        <span class="muted" x-show="!saving && lastSavedAt">Saved <span x-text="lastSavedAt"></span></span>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function getDraftPayload() {
+      const el = document.getElementById("draft-payload");
+      if (!el) {
+        return {};
+      }
+      try {
+        return JSON.parse(el.textContent);
+      } catch (error) {
+        return {};
+      }
+    }
+
+    function workoutForm(initial) {
+      return {
+        performedAt: initial.performed_at || localDatetimeNow(),
+        templateName: initial.template_name || "",
+        notes: initial.notes || "",
+        entries: Array.isArray(initial.entries) && initial.entries.length ? initial.entries : [""],
+        saving: false,
+        lastSavedAt: null,
+        saveTimer: null,
+        init() {
+          if (!this.hasServerDraft()) {
+            const localDraft = loadLocalDraft();
+            if (localDraft) {
+              this.applyDraft(localDraft);
+            }
+          }
+          this.$watch("performedAt", () => this.queueSave());
+          this.$watch("templateName", () => this.queueSave());
+          this.$watch("notes", () => this.queueSave());
+          this.$watch("entries", () => this.queueSave(), { deep: true });
+          window.addEventListener("online", () => this.saveDraft());
+        },
+        hasServerDraft() {
+          return initial && Array.isArray(initial.entries) && initial.entries.length;
+        },
+        applyDraft(draft) {
+          this.performedAt = draft.performed_at || this.performedAt;
+          this.templateName = draft.template_name || this.templateName;
+          this.notes = draft.notes || this.notes;
+          this.entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : this.entries;
+        },
+        addRow() {
+          this.entries.push("");
+        },
+        removeRow(index) {
+          this.entries.splice(index, 1);
+          if (this.entries.length === 0) {
+            this.entries.push("");
+          }
+        },
+        queueSave() {
+          clearTimeout(this.saveTimer);
+          this.saveTimer = setTimeout(() => this.saveDraft(), 500);
+        },
+        async saveDraft() {
+          const payload = {
+            performed_at: this.performedAt,
+            template_name: this.templateName,
+            notes: this.notes,
+            entries: this.entries,
+          };
+          saveLocalDraft(payload);
+          this.saving = true;
+          try {
+            const response = await fetch("{% url 'workout-draft' %}", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+              },
+              body: JSON.stringify(payload),
+            });
+            if (response.ok) {
+              this.lastSavedAt = new Date().toLocaleTimeString();
+            }
+          } catch (error) {
+            // Offline or server error - localStorage already has a copy.
+          } finally {
+            this.saving = false;
+          }
+        },
+      };
+    }
+
+    function localDatetimeNow() {
+      const now = new Date();
+      const offset = now.getTimezoneOffset() * 60000;
+      return new Date(now.getTime() - offset).toISOString().slice(0, 16);
+    }
+
+    function saveLocalDraft(payload) {
+      try {
+        localStorage.setItem("workout_draft", JSON.stringify(payload));
+      } catch (error) {
+        // Ignore storage errors (private mode, low storage, etc.)
+      }
+    }
+
+    function loadLocalDraft() {
+      try {
+        const raw = localStorage.getItem("workout_draft");
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+      }
+      return "";
+    }
+  </script>
+{% endblock %}
