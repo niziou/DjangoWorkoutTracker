@@ -7,6 +7,13 @@
     <h2 style="margin-top: 0;">Workout</h2>
     <div><strong>Date:</strong> {{ workout.performed_at|date:"Y-m-d H:i" }}</div>
     <div><strong>Template:</strong> {{ workout.template_name|default:"-" }}</div>
+    <div><strong>Type:</strong>
+      {% if workout.training_type %}
+        {{ workout.get_training_type_display }}
+      {% else %}
+        -
+      {% endif %}
+    </div>
     <div><strong>Notes:</strong> {{ workout.notes|default:"" }}</div>
   </div>
 

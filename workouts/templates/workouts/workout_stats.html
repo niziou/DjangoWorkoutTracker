@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Stats{% endblock %}
+
+{% block content %}
+  {{ weekly_tonnage|json_script:"weekly-tonnage" }}
+  {{ sets_by_group|json_script:"sets-by-group" }}
+  <div class="card">
+    <h2 style="margin-top: 0;">Stats</h2>
+    <div class="muted">Month: {{ month_start|date:"Y-m-d" }} → {{ month_end|date:"Y-m-d" }}</div>
+    <div style="margin-top: 6px;">
+      <strong>Total tonnage this month:</strong> {{ total_month_tonnage }} kg
+    </div>
+    <div style="margin-top: 6px;">
+      <a class="btn secondary small" href="{% url 'exercise-volume' %}">Exercise volume chart</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top: 0;">Weekly tonnage (last 12 weeks)</h3>
+    <canvas id="tonnageChart" height="120"></canvas>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top: 0;">Sets by muscle group (current month)</h3>
+    <canvas id="setsChart" height="120"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const weeklyData = JSON.parse(document.getElementById("weekly-tonnage").textContent);
+    const setsByGroup = JSON.parse(document.getElementById("sets-by-group").textContent);
+
+    const weekLabels = weeklyData.map(item => item.week);
+    const weekTotals = weeklyData.map(item => item.total);
+
+    const ctxTonnage = document.getElementById("tonnageChart");
+    new Chart(ctxTonnage, {
+      type: "line",
+      data: {
+        labels: weekLabels,
+        datasets: [{
+          label: "Tonnage (kg)",
+          data: weekTotals,
+          borderColor: "#1d4ed8",
+          backgroundColor: "rgba(29, 78, 216, 0.15)",
+          fill: true,
+          tension: 0.25,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+        },
+        scales: {
+          y: { beginAtZero: true },
+        },
+      }
+    });
+
+    const groupLabels = Object.keys(setsByGroup);
+    const groupTotals = Object.values(setsByGroup);
+
+    const ctxSets = document.getElementById("setsChart");
+    new Chart(ctxSets, {
+      type: "bar",
+      data: {
+        labels: groupLabels,
+        datasets: [{
+          label: "Sets",
+          data: groupTotals,
+          backgroundColor: "#0ea5e9",
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+        },
+        scales: {
+          y: { beginAtZero: true },
+        },
+      }
+    });
+  </script>
+{% endblock %}

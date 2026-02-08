@@ -29,6 +29,15 @@
         <input type="text" id="template_name" name="template_name" x-model="templateName">
       </div>
       <div class="field">
+        <label for="training_type">Training type</label>
+        <select id="training_type" name="training_type" x-model="trainingType">
+          <option value="">--</option>
+          {% for value, label in training_types %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
         <label for="notes">Notes</label>
         <textarea id="notes" name="notes" x-model="notes"></textarea>
       </div>
@@ -78,6 +87,7 @@
       return {
         performedAt: initial.performed_at || localDatetimeNow(),
         templateName: initial.template_name || "",
+        trainingType: initial.training_type || "",
         notes: initial.notes || "",
         entries: Array.isArray(initial.entries) && initial.entries.length ? initial.entries : [""],
         saving: false,
@@ -92,6 +102,7 @@
           }
           this.$watch("performedAt", () => this.queueSave());
           this.$watch("templateName", () => this.queueSave());
+          this.$watch("trainingType", () => this.queueSave());
           this.$watch("notes", () => this.queueSave());
           this.$watch("entries", () => this.queueSave(), { deep: true });
           window.addEventListener("online", () => this.saveDraft());
@@ -102,6 +113,7 @@
         applyDraft(draft) {
           this.performedAt = draft.performed_at || this.performedAt;
           this.templateName = draft.template_name || this.templateName;
+          this.trainingType = draft.training_type || this.trainingType;
           this.notes = draft.notes || this.notes;
           this.entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : this.entries;
         },
@@ -122,6 +134,7 @@
           const payload = {
             performed_at: this.performedAt,
             template_name: this.templateName,
+            training_type: this.trainingType,
             notes: this.notes,
             entries: this.entries,
           };

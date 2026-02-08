@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 import re
 from typing import Any, Optional
@@ -9,6 +9,7 @@ from typing import Any, Optional
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, ExpressionWrapper, Sum
+from django.db.models.functions import TruncDate, TruncWeek
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -298,4 +299,166 @@ def count_sets_by_muscle_group(
     for row in aggregates:
         group = row["performed_exercise__exercise__primary_muscle_group"]
         results[group] = row["total"]
+    return results
+
+
+def get_weekly_tonnage(
+    user: User, *, weeks: int = 12, end_date: date | None = None
+) -> list[dict[str, Any]]:
+    if weeks <= 0:
+        return []
+
+    end_date = end_date or timezone.localdate()
+    start_date = end_date - timedelta(weeks=weeks - 1)
+    start_of_week = start_date - timedelta(days=start_date.weekday())
+    end_of_week = end_date - timedelta(days=end_date.weekday())
+
+    start = _normalize_start(start_of_week)
+    end = _normalize_end(end_date)
+
+    weighted_sets = PerformedSet.objects.filter(
+        performed_exercise__workout_session__user=user,
+        performed_exercise__workout_session__performed_at__gte=start,
+        performed_exercise__workout_session__performed_at__lte=end,
+        weight_kg__isnull=False,
+        reps__isnull=False,
+    )
+
+    tonnage_expr = ExpressionWrapper(
+        F("weight_kg") * F("reps"), output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+
+    aggregates = (
+        weighted_sets.annotate(
+            week=TruncWeek(
+                "performed_exercise__workout_session__performed_at",
+                tzinfo=timezone.get_current_timezone(),
+            )
+        )
+        .values("week")
+        .annotate(total=Sum(tonnage_expr))
+        .order_by("week")
+    )
+
+    totals_by_week: dict[date, float] = {}
+    for row in aggregates:
+        week_start = row["week"].date() if row["week"] else None
+        if week_start:
+            totals_by_week[week_start] = float(row["total"] or Decimal("0"))
+
+    results: list[dict[str, Any]] = []
+    current = start_of_week
+    while current <= end_of_week:
+        results.append(
+            {
+                "week": current.isoformat(),
+                "total": totals_by_week.get(current, 0.0),
+            }
+        )
+        current += timedelta(weeks=1)
+    return results
+
+
+def get_exercise_weekly_volume(
+    user: User,
+    exercise_id: int,
+    *,
+    weeks: int = 12,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    if weeks <= 0:
+        return []
+
+    end_date = end_date or timezone.localdate()
+    start_date = end_date - timedelta(weeks=weeks - 1)
+    start_of_week = start_date - timedelta(days=start_date.weekday())
+    end_of_week = end_date - timedelta(days=end_date.weekday())
+
+    start = _normalize_start(start_of_week)
+    end = _normalize_end(end_date)
+
+    weighted_sets = PerformedSet.objects.filter(
+        performed_exercise__workout_session__user=user,
+        performed_exercise__exercise__id=exercise_id,
+        performed_exercise__workout_session__performed_at__gte=start,
+        performed_exercise__workout_session__performed_at__lte=end,
+        weight_kg__isnull=False,
+        reps__isnull=False,
+    )
+
+    tonnage_expr = ExpressionWrapper(
+        F("weight_kg") * F("reps"), output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+
+    aggregates = (
+        weighted_sets.annotate(
+            week=TruncWeek(
+                "performed_exercise__workout_session__performed_at",
+                tzinfo=timezone.get_current_timezone(),
+            )
+        )
+        .values("week")
+        .annotate(total=Sum(tonnage_expr))
+        .order_by("week")
+    )
+
+    totals_by_week: dict[date, float] = {}
+    for row in aggregates:
+        week_start = row["week"].date() if row["week"] else None
+        if week_start:
+            totals_by_week[week_start] = float(row["total"] or Decimal("0"))
+
+    results: list[dict[str, Any]] = []
+    current = start_of_week
+    while current <= end_of_week:
+        results.append(
+            {
+                "week": current.isoformat(),
+                "total": totals_by_week.get(current, 0.0),
+            }
+        )
+        current += timedelta(weeks=1)
+    return results
+
+
+def get_daily_tonnage(
+    user: User, date_from: date | datetime, date_to: date | datetime
+) -> dict[date, float]:
+    start = _normalize_start(date_from)
+    end = _normalize_end(date_to)
+
+    weighted_sets = PerformedSet.objects.filter(
+        performed_exercise__workout_session__user=user,
+        performed_exercise__workout_session__performed_at__gte=start,
+        performed_exercise__workout_session__performed_at__lte=end,
+        weight_kg__isnull=False,
+        reps__isnull=False,
+    )
+
+    tonnage_expr = ExpressionWrapper(
+        F("weight_kg") * F("reps"), output_field=DecimalField(max_digits=12, decimal_places=2)
+    )
+
+    aggregates = (
+        weighted_sets.annotate(
+            day=TruncDate(
+                "performed_exercise__workout_session__performed_at",
+                tzinfo=timezone.get_current_timezone(),
+            )
+        )
+        .values("day")
+        .annotate(total=Sum(tonnage_expr))
+        .order_by("day")
+    )
+
+    results: dict[date, float] = {}
+    for row in aggregates:
+        raw_day = row["day"]
+        if not raw_day:
+            continue
+        if isinstance(raw_day, datetime):
+            day = raw_day.date()
+        else:
+            day = raw_day
+        results[day] = float(row["total"] or Decimal("0"))
     return results

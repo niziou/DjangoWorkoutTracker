@@ -52,7 +52,7 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = WorkoutSession
-        fields = ["id", "performed_at", "template_name", "notes", "exercises"]
+        fields = ["id", "performed_at", "template_name", "training_type", "notes", "exercises"]
 
     def create(self, validated_data: dict[str, Any]) -> WorkoutSession:
         exercises_data = validated_data.pop("exercises", [])

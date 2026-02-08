@@ -124,6 +124,9 @@
         <a href="{% url 'workout-list' %}">Workout Logger</a>
         {% if user.is_authenticated %}
           <a href="{% url 'workout-create' %}">Add Training</a>
+          <a href="{% url 'workout-calendar' %}">Calendar</a>
+          <a href="{% url 'workout-stats' %}">Stats</a>
+          <a href="{% url 'exercise-volume' %}">Exercise Volume</a>
         {% endif %}
       </div>
       <div>

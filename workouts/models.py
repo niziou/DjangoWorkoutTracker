@@ -45,6 +45,16 @@ class Exercise(models.Model):
         return self.name
 
 
+class WorkoutType(models.TextChoices):
+    FBW = "FBW", "FBW"
+    UPPER = "UPPER", "Upper"
+    LOWER = "LOWER", "Lower"
+    PUSH = "PUSH", "Push"
+    PULL = "PULL", "Pull"
+    LEGS = "LEGS", "Legs"
+    OTHER = "OTHER", "Other"
+
+
 class ExerciseAlias(models.Model):
     exercise = models.ForeignKey(Exercise, on_delete=models.CASCADE, related_name="aliases")
     alias: str = models.CharField(max_length=100)
@@ -67,6 +77,9 @@ class WorkoutSession(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="workouts")
     performed_at: Any = models.DateTimeField()
     template_name: str = models.CharField(max_length=100, blank=True)
+    training_type: str = models.CharField(
+        max_length=20, choices=WorkoutType.choices, blank=True
+    )
     notes: str = models.TextField(blank=True)
     created_at: Any = models.DateTimeField(auto_now_add=True)
     updated_at: Any = models.DateTimeField(auto_now=True)

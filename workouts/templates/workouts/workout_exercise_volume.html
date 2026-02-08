@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Exercise Volume{% endblock %}
+
+{% block content %}
+  {{ volume_data|json_script:"exercise-volume-data" }}
+  <div class="card">
+    <h2 style="margin-top: 0;">Exercise Volume Over Time</h2>
+    {% if exercises %}
+      <form method="get" class="row" style="margin-bottom: 12px;">
+        <div class="field" style="margin-bottom: 0;">
+          <label for="exercise_id">Exercise</label>
+          <select id="exercise_id" name="exercise_id">
+            {% for exercise in exercises %}
+              <option value="{{ exercise.id }}" {% if selected_exercise and selected_exercise.id == exercise.id %}selected{% endif %}>
+                {{ exercise.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="align-self: flex-end;">
+          <button class="btn secondary small" type="submit">Show</button>
+        </div>
+      </form>
+      <canvas id="exerciseVolumeChart" height="140"></canvas>
+    {% else %}
+      <p class="muted">No exercises found yet.</p>
+    {% endif %}
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const volumeData = JSON.parse(
+      document.getElementById("exercise-volume-data").textContent
+    );
+    const labels = volumeData.map(item => item.week);
+    const totals = volumeData.map(item => item.total);
+
+    const ctx = document.getElementById("exerciseVolumeChart");
+    if (ctx) {
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Tonnage (kg)",
+            data: totals,
+            borderColor: "#1d4ed8",
+            backgroundColor: "rgba(29, 78, 216, 0.15)",
+            fill: true,
+            tension: 0.25,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } },
+        }
+      });
+    }
+  </script>
+{% endblock %}

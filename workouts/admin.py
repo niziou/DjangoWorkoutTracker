@@ -30,9 +30,9 @@ class PerformedExerciseInline(admin.TabularInline):
 
 @admin.register(WorkoutSession)
 class WorkoutSessionAdmin(admin.ModelAdmin):
-    list_display = ("performed_at", "user", "template_name", "created_at")
+    list_display = ("performed_at", "user", "template_name", "training_type", "created_at")
     search_fields = ("template_name", "notes")
-    list_filter = ("performed_at",)
+    list_filter = ("performed_at", "training_type")
     inlines = [PerformedExerciseInline]
 
 

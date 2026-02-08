@@ -16,12 +16,29 @@
   </div>
 
   <div class="card">
+    <form method="get" class="row" style="margin-bottom: 12px;">
+      <div class="field" style="margin-bottom: 0;">
+        <label for="training_type">Filter by type</label>
+        <select id="training_type" name="training_type">
+          <option value="">All</option>
+          {% for value, label in training_types %}
+            <option value="{{ value }}" {% if selected_training_type == value %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="align-self: flex-end;">
+        <button class="btn secondary small" type="submit">Apply</button>
+      </div>
+    </form>
     {% if workouts %}
       <table class="table">
         <thead>
           <tr>
             <th>Date</th>
             <th>Template</th>
+            <th>Type</th>
             <th>Notes</th>
           </tr>
         </thead>
@@ -34,6 +51,13 @@
                 </a>
               </td>
               <td>{{ workout.template_name|default:"-" }}</td>
+              <td>
+                {% if workout.training_type %}
+                  {{ workout.get_training_type_display }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
               <td>{{ workout.notes|default:"" }}</td>
             </tr>
           {% endfor %}
