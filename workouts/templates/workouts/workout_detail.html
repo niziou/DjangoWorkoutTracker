@@ -3,7 +3,7 @@
 {% block title %}Workout {{ workout.performed_at|date:"Y-m-d" }}{% endblock %}
 
 {% block content %}
-  <div class="card">
+  <div class="card elevated">
     <h2 style="margin-top: 0;">Workout</h2>
     <div><strong>Date:</strong> {{ workout.performed_at|date:"Y-m-d H:i" }}</div>
     <div><strong>Template:</strong> {{ workout.template_name|default:"-" }}</div>
@@ -18,7 +18,7 @@
   </div>
 
   {% for exercise in workout.exercises.all %}
-    <div class="card">
+    <div class="card" style="--i: {{ forloop.counter0 }};">
       <h3 style="margin-top: 0;">{{ exercise.exercise.name }}</h3>
       {% if exercise.notes %}
         <div class="muted">{{ exercise.notes }}</div>

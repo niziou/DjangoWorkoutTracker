@@ -5,7 +5,7 @@
 {% block content %}
   {{ weekly_tonnage|json_script:"weekly-tonnage" }}
   {{ sets_by_group|json_script:"sets-by-group" }}
-  <div class="card">
+  <div class="card elevated">
     <h2 style="margin-top: 0;">Stats</h2>
     <div class="muted">Month: {{ month_start|date:"Y-m-d" }} → {{ month_end|date:"Y-m-d" }}</div>
     <div style="margin-top: 6px;">
@@ -16,14 +16,16 @@
     </div>
   </div>
 
-  <div class="card">
-    <h3 style="margin-top: 0;">Weekly tonnage (last 12 weeks)</h3>
-    <canvas id="tonnageChart" height="120"></canvas>
-  </div>
+  <div class="stat-grid">
+    <div class="card">
+      <h3 style="margin-top: 0;">Weekly tonnage (last 12 weeks)</h3>
+      <canvas id="tonnageChart" height="140"></canvas>
+    </div>
 
-  <div class="card">
-    <h3 style="margin-top: 0;">Sets by muscle group (current month)</h3>
-    <canvas id="setsChart" height="120"></canvas>
+    <div class="card">
+      <h3 style="margin-top: 0;">Sets by muscle group (current month)</h3>
+      <canvas id="setsChart" height="140"></canvas>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -54,7 +56,15 @@
           legend: { display: false },
         },
         scales: {
-          y: { beginAtZero: true },
+          y: {
+            beginAtZero: true,
+            ticks: { color: "#cbd5f5" },
+            grid: { color: "rgba(148, 163, 184, 0.2)" },
+          },
+          x: {
+            ticks: { color: "#cbd5f5" },
+            grid: { color: "rgba(148, 163, 184, 0.08)" },
+          },
         },
       }
     });
@@ -79,7 +89,15 @@
           legend: { display: false },
         },
         scales: {
-          y: { beginAtZero: true },
+          y: {
+            beginAtZero: true,
+            ticks: { color: "#cbd5f5" },
+            grid: { color: "rgba(148, 163, 184, 0.2)" },
+          },
+          x: {
+            ticks: { color: "#cbd5f5" },
+            grid: { color: "rgba(148, 163, 184, 0.08)" },
+          },
         },
       }
     });

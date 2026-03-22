@@ -4,7 +4,7 @@
 
 {% block content %}
   {{ volume_data|json_script:"exercise-volume-data" }}
-  <div class="card">
+  <div class="card elevated">
     <h2 style="margin-top: 0;">Exercise Volume Over Time</h2>
     {% if exercises %}
       <form method="get" class="row" style="margin-bottom: 12px;">
@@ -51,12 +51,22 @@
             tension: 0.25,
           }]
         },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true } },
-        }
-      });
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { color: "#cbd5f5" },
+            grid: { color: "rgba(148, 163, 184, 0.2)" },
+          },
+          x: {
+            ticks: { color: "#cbd5f5" },
+            grid: { color: "rgba(148, 163, 184, 0.08)" },
+          },
+        },
+      }
+    });
     }
   </script>
 {% endblock %}

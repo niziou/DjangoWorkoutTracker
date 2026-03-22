@@ -3,7 +3,7 @@
 {% block title %}Calendar{% endblock %}
 
 {% block content %}
-  <div class="card">
+  <div class="card elevated">
     <div class="row" style="align-items: center;">
       <div>
         <h2 style="margin: 0;">Calendar</h2>
@@ -16,10 +16,10 @@
     </div>
   </div>
 
-  <div style="display: grid; grid-template-columns: 280px 1fr; gap: 16px;">
+  <div class="split">
     <div class="card">
       <h3 style="margin-top: 0;">{{ selected_date|date:"F Y" }}</h3>
-      <table class="table">
+      <table class="table calendar-table">
         <thead>
           <tr>
             <th>Mon</th>
@@ -35,26 +35,21 @@
           {% for week in calendar_rows %}
             <tr>
               {% for cell in week %}
-                <td style="vertical-align: top; padding: 6px;">
-                  <a
-                    href="{% url 'workout-calendar' %}?date={{ cell.date_key }}"
-                    style="
-                      display: inline-block;
-                      padding: 4px 6px;
-                      border-radius: 6px;
-                      text-decoration: none;
-                      color: {% if cell.date_key == selected_date|date:'Y-m-d' %}#1d4ed8{% else %}#1f2937{% endif %};
-                      {% if not cell.in_month %}opacity: 0.35;{% endif %}
-                    "
+                <td>
+                  <div
+                    class="calendar-cell {% if not cell.in_month %}is-muted{% endif %} {% if cell.date_key == selected_date|date:'Y-m-d' %}is-selected{% endif %}"
+                    data-tonnage="{{ cell.tonnage }}"
                   >
-                    {{ cell.date.day }}
-                  </a>
-                  {% if cell.count %}
-                    <div class="muted" style="font-size: 11px;">{{ cell.count }} trening</div>
-                  {% endif %}
-                  {% if cell.tonnage %}
-                    <div class="muted" style="font-size: 11px;">{{ cell.tonnage|floatformat:0 }} kg</div>
-                  {% endif %}
+                    <a class="calendar-day" href="{% url 'workout-calendar' %}?date={{ cell.date_key }}">
+                      {{ cell.date.day }}
+                    </a>
+                    {% if cell.count %}
+                      <div class="calendar-meta">{{ cell.count }} trening</div>
+                    {% endif %}
+                    {% if cell.tonnage %}
+                      <div class="calendar-meta">{{ cell.tonnage|floatformat:0 }} kg</div>
+                    {% endif %}
+                  </div>
                 </td>
               {% endfor %}
             </tr>
@@ -64,7 +59,7 @@
     </div>
 
     <div>
-      <div class="card">
+      <div class="card elevated">
         <h3 style="margin-top: 0;">{{ selected_date|date:"Y-m-d" }}</h3>
         <div class="muted">Total tonnage: {{ selected_day_tonnage|floatformat:0 }} kg</div>
         {% if day_workouts %}
@@ -93,4 +88,12 @@
       </div>
     </div>
   </div>
+
+  <script>
+    document.querySelectorAll(".calendar-cell").forEach((cell) => {
+      const tonnage = parseFloat(cell.dataset.tonnage || "0");
+      const intensity = Math.min(1, tonnage / 5000);
+      cell.style.setProperty("--heat", intensity.toFixed(2));
+    });
+  </script>
 {% endblock %}
