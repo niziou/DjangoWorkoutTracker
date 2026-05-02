@@ -7,6 +7,11 @@ import dj_database_url
 from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = Path(os.environ.get("DJANGO_DATA_DIR", BASE_DIR / "data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+LOCAL_SQLITE_PATH = Path(
+    os.environ.get("DJANGO_SQLITE_PATH", DATA_DIR / "workouts.sqlite3")
+)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", get_random_secret_key())
 DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
@@ -59,8 +64,9 @@ ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        default=f"sqlite:///{LOCAL_SQLITE_PATH}",
         conn_max_age=600,
+        conn_health_checks=True,
     )
 }
 

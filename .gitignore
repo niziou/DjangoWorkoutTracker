@@ -9,6 +9,10 @@ venv/
 
 # Django artifacts
 db.sqlite3
+data/*.sqlite3
+data/*.sqlite3-*
+data/*.backup.sqlite3
+!data/.gitkeep
 
 # Test and tooling caches
 .pytest_cache/
