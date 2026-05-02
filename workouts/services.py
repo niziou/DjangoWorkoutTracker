@@ -85,9 +85,30 @@ _BODYWEIGHT_RE = re.compile(
     r"^\s*(?P<sets>\d+)\s*x\s*(?P<reps>\d+)\s+(?P<exercise>.+?)\s*$",
     re.IGNORECASE,
 )
+_DETAILED_ENTRY_RE = re.compile(
+    r"^\s*(?P<exercise>[^:]+?)\s*:\s*(?P<sets>.+?)\s*$",
+    re.IGNORECASE,
+)
+_DETAILED_WEIGHT_SET_RE = re.compile(
+    r"^\s*(?P<weight>\d+(?:[.,]\d+)?)\s*(kg)?\s*x\s*(?P<reps>\d+)\s*$",
+    re.IGNORECASE,
+)
+_DETAILED_DURATION_SET_RE = re.compile(
+    r"^\s*(?P<duration>\d+)\s*(s|sec|secs|second|seconds)\s*$",
+    re.IGNORECASE,
+)
+_DETAILED_BODYWEIGHT_SET_RE = re.compile(
+    r"^\s*(?:x\s*)?(?P<reps>\d+)\s*(reps?)?\s*$",
+    re.IGNORECASE,
+)
 
 
-def resolve_exercise(raw_name: str, *, is_bodyweight_hint: bool | None = None) -> Exercise:
+def resolve_exercise(
+    raw_name: str,
+    *,
+    is_bodyweight_hint: bool | None = None,
+    allow_create: bool = True,
+) -> Exercise:
     normalized = normalize_text(raw_name)
     alias = (
         ExerciseAlias.objects.select_related("exercise")
@@ -109,6 +130,9 @@ def resolve_exercise(raw_name: str, *, is_bodyweight_hint: bool | None = None) -
     name = raw_name.strip()
     if not name:
         raise QuickEntryParseError("Exercise name is missing.")
+
+    if not allow_create:
+        raise QuickEntryParseError(f"Unknown exercise '{name}'.")
 
     is_bodyweight = bool(is_bodyweight_hint) if is_bodyweight_hint is not None else False
     exercise = Exercise.objects.create(
@@ -132,17 +156,112 @@ def _build_sets(count: int, *, weight: Decimal | None, reps: int | None, duratio
     ]
 
 
-def parse_quick_entry(raw_entry: str) -> ParsedExerciseEntry:
+def _parse_detailed_entry(
+    raw_entry: str, *, allow_create_missing: bool
+) -> ParsedExerciseEntry | None:
+    match_detailed = _DETAILED_ENTRY_RE.match(raw_entry)
+    if not match_detailed:
+        return None
+
+    exercise_name = match_detailed.group("exercise").strip()
+    raw_sets = match_detailed.group("sets")
+    set_tokens = [
+        token.strip()
+        for token in re.split(r"\s*[,;]\s*", raw_sets)
+        if token and token.strip()
+    ]
+    if not set_tokens:
+        raise QuickEntryParseError(f"Exercise '{exercise_name}' has no sets.")
+
+    detailed_kind = ""
+    if all(_DETAILED_WEIGHT_SET_RE.match(token) for token in set_tokens):
+        detailed_kind = "weight"
+    elif all(_DETAILED_DURATION_SET_RE.match(token) for token in set_tokens):
+        detailed_kind = "duration"
+    elif all(_DETAILED_BODYWEIGHT_SET_RE.match(token) for token in set_tokens):
+        detailed_kind = "bodyweight"
+    else:
+        raise QuickEntryParseError(
+            f"Mixed or unsupported set formats for '{exercise_name}'."
+        )
+
+    exercise = resolve_exercise(
+        exercise_name,
+        is_bodyweight_hint=detailed_kind != "weight",
+        allow_create=allow_create_missing,
+    )
+    parsed_sets: list[ParsedSet] = []
+
+    if detailed_kind == "weight":
+        for token in set_tokens:
+            match_weight = _DETAILED_WEIGHT_SET_RE.match(token)
+            assert match_weight is not None
+            parsed_sets.append(
+                ParsedSet(
+                    weight_kg=Decimal(match_weight.group("weight").replace(",", ".")),
+                    reps=int(match_weight.group("reps")),
+                    duration_seconds=None,
+                    is_warmup=False,
+                )
+            )
+        return ParsedExerciseEntry(exercise=exercise, sets=parsed_sets)
+
+    if detailed_kind == "duration":
+        for token in set_tokens:
+            match_duration = _DETAILED_DURATION_SET_RE.match(token)
+            assert match_duration is not None
+            parsed_sets.append(
+                ParsedSet(
+                    weight_kg=None,
+                    reps=None,
+                    duration_seconds=int(match_duration.group("duration")),
+                    is_warmup=False,
+                )
+            )
+        return ParsedExerciseEntry(exercise=exercise, sets=parsed_sets)
+
+    if not exercise.is_bodyweight:
+        raise QuickEntryParseError(
+            f"Missing weight for '{exercise.name}'. Use format like '3x5 {exercise.name} 75kg'."
+        )
+
+    for token in set_tokens:
+        match_bodyweight = _DETAILED_BODYWEIGHT_SET_RE.match(token)
+        assert match_bodyweight is not None
+        parsed_sets.append(
+            ParsedSet(
+                weight_kg=Decimal("0"),
+                reps=int(match_bodyweight.group("reps")),
+                duration_seconds=None,
+                is_warmup=False,
+            )
+        )
+    return ParsedExerciseEntry(exercise=exercise, sets=parsed_sets)
+
+
+def parse_quick_entry(
+    raw_entry: str, *, allow_create_missing: bool = True
+) -> ParsedExerciseEntry:
     raw_entry = raw_entry.strip()
     if not raw_entry:
         raise QuickEntryParseError("Empty entry.")
+
+    detailed_entry = _parse_detailed_entry(
+        raw_entry, allow_create_missing=allow_create_missing
+    )
+    if detailed_entry:
+        return detailed_entry
 
     match_time = _TIME_RE.match(raw_entry)
     if match_time:
         sets = int(match_time.group("sets"))
         duration = int(match_time.group("duration"))
         exercise_name = match_time.group("exercise")
-        exercise = resolve_exercise(exercise_name, is_bodyweight_hint=True)
+        exercise = resolve_exercise(
+            exercise_name,
+            is_bodyweight_hint=True,
+            allow_create=allow_create_missing,
+        )
         return ParsedExerciseEntry(exercise=exercise, sets=_build_sets(sets, weight=None, reps=None, duration=duration))
 
     match_weight = _WEIGHT_RE.match(raw_entry)
@@ -152,7 +271,11 @@ def parse_quick_entry(raw_entry: str) -> ParsedExerciseEntry:
         weight_raw = match_weight.group("weight").replace(",", ".")
         weight = Decimal(weight_raw)
         exercise_name = match_weight.group("exercise")
-        exercise = resolve_exercise(exercise_name, is_bodyweight_hint=False)
+        exercise = resolve_exercise(
+            exercise_name,
+            is_bodyweight_hint=False,
+            allow_create=allow_create_missing,
+        )
         return ParsedExerciseEntry(exercise=exercise, sets=_build_sets(sets, weight=weight, reps=reps, duration=None))
 
     match_bodyweight = _BODYWEIGHT_RE.match(raw_entry)
@@ -160,7 +283,11 @@ def parse_quick_entry(raw_entry: str) -> ParsedExerciseEntry:
         sets = int(match_bodyweight.group("sets"))
         reps = int(match_bodyweight.group("reps"))
         exercise_name = match_bodyweight.group("exercise")
-        exercise = resolve_exercise(exercise_name, is_bodyweight_hint=True)
+        exercise = resolve_exercise(
+            exercise_name,
+            is_bodyweight_hint=True,
+            allow_create=allow_create_missing,
+        )
         if not exercise.is_bodyweight:
             raise QuickEntryParseError(
                 f"Missing weight for '{exercise.name}'. Use format like '3x5 {exercise.name} 75kg'."
@@ -171,11 +298,13 @@ def parse_quick_entry(raw_entry: str) -> ParsedExerciseEntry:
         )
 
     raise QuickEntryParseError(
-        "Unsupported format. Use '3x5 bench press 75kg' or '3x30s hollow hold'."
+        "Unsupported format. Use '3x5 bench press 75kg', '3x30s hollow hold', or 'bench press: 20kg x 5, 40kg x 5'."
     )
 
 
-def parse_entries(entries: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
+def parse_entries(
+    entries: list[str], *, allow_create_missing: bool = True
+) -> tuple[list[dict[str, Any]], list[str]]:
     exercises_payload: list[dict[str, Any]] = []
     errors: list[str] = []
     order_index = 1
@@ -183,7 +312,9 @@ def parse_entries(entries: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
         if not raw_entry or not raw_entry.strip():
             continue
         try:
-            parsed = parse_quick_entry(raw_entry)
+            parsed = parse_quick_entry(
+                raw_entry, allow_create_missing=allow_create_missing
+            )
         except QuickEntryParseError as exc:
             errors.append(f"{raw_entry}: {exc}")
             continue

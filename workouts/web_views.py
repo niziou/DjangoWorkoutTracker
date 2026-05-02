@@ -13,6 +13,12 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from .models import Exercise, WorkoutDraft, WorkoutSession, WorkoutType
+from .photo_import import (
+    WorkoutPhotoImportConfigurationError,
+    WorkoutPhotoImportError,
+    WorkoutPhotoImportProviderError,
+    import_workout_photo,
+)
 from .services import (
     calculate_tonnage,
     count_sets_by_muscle_group,
@@ -83,6 +89,8 @@ class WorkoutCreateView(LoginRequiredMixin, View):
         training_type = request.POST.get("training_type", "").strip()
         notes = request.POST.get("notes", "").strip()
         entries_raw = request.POST.get("entries_json", "[]")
+        import_warnings_raw = request.POST.get("import_warnings_json", "[]")
+        errors: list[str] = []
 
         try:
             entries = json.loads(entries_raw)
@@ -90,11 +98,24 @@ class WorkoutCreateView(LoginRequiredMixin, View):
                 raise ValueError("Entries payload must be a list.")
         except ValueError:
             entries = []
-            errors = ["Entries payload is invalid JSON."]
+            errors.append("Entries payload is invalid JSON.")
         else:
             exercises_payload, errors = parse_entries([str(entry) for entry in entries])
             if not errors and not exercises_payload:
                 errors.append("Add at least one entry before saving.")
+
+        try:
+            import_warnings = json.loads(import_warnings_raw)
+            if not isinstance(import_warnings, list):
+                raise ValueError("Import warnings payload must be a list.")
+            import_warnings = [
+                str(warning).strip()
+                for warning in import_warnings
+                if str(warning).strip()
+            ]
+        except ValueError:
+            import_warnings = []
+            errors.append("Import warnings payload is invalid JSON.")
 
         performed_at = timezone.now()
         if performed_at_raw:
@@ -113,6 +134,7 @@ class WorkoutCreateView(LoginRequiredMixin, View):
                 "training_type": training_type,
                 "notes": notes,
                 "entries": entries,
+                "import_warnings": import_warnings,
             }
             return render(
                 request,
@@ -154,6 +176,29 @@ class WorkoutDraftView(LoginRequiredMixin, View):
             defaults={"payload": payload},
         )
         return JsonResponse({"status": "ok"})
+
+
+class WorkoutPhotoImportView(LoginRequiredMixin, View):
+    def post(self, request: HttpRequest) -> JsonResponse:
+        photo = request.FILES.get("photo")
+        if not photo:
+            return JsonResponse({"detail": "Photo is required."}, status=400)
+
+        try:
+            result = import_workout_photo(photo)
+        except WorkoutPhotoImportConfigurationError as exc:
+            return JsonResponse({"detail": str(exc)}, status=503)
+        except WorkoutPhotoImportProviderError as exc:
+            return JsonResponse({"detail": str(exc)}, status=502)
+        except WorkoutPhotoImportError as exc:
+            return JsonResponse({"detail": str(exc)}, status=400)
+
+        return JsonResponse(
+            {
+                "entries": result.entries,
+                "warnings": result.warnings,
+            }
+        )
 
 
 class WorkoutCalendarView(LoginRequiredMixin, View):

@@ -116,3 +116,44 @@ class ServiceTests(TestCase):
         self.assertFalse(errors)
         self.assertEqual(len(exercises_payload), 1)
         self.assertEqual(exercises_payload[0]["exercise"].slug, "seated-cable-row")
+
+    def test_parse_entries_supports_detailed_weight_sets(self) -> None:
+        create_exercise("Bench Press", muscle_group=MuscleGroup.CHEST)
+
+        exercises_payload, errors = parse_entries(
+            ["Bench Press: 20kg x 10, 40kg x 8, 50kg x 6"]
+        )
+
+        self.assertFalse(errors)
+        self.assertEqual(len(exercises_payload), 1)
+        self.assertEqual(len(exercises_payload[0]["sets"]), 3)
+        self.assertEqual(exercises_payload[0]["sets"][0]["weight_kg"], Decimal("20"))
+        self.assertEqual(exercises_payload[0]["sets"][1]["reps"], 8)
+        self.assertEqual(exercises_payload[0]["sets"][2]["weight_kg"], Decimal("50"))
+
+    def test_parse_entries_supports_detailed_bodyweight_sets(self) -> None:
+        create_exercise(
+            "Pull Up",
+            muscle_group=MuscleGroup.BACK,
+            is_bodyweight=True,
+        )
+
+        exercises_payload, errors = parse_entries(["Pull Up: 8 reps, 7 reps, 6 reps"])
+
+        self.assertFalse(errors)
+        self.assertEqual(len(exercises_payload), 1)
+        self.assertEqual(len(exercises_payload[0]["sets"]), 3)
+        self.assertEqual(exercises_payload[0]["sets"][0]["weight_kg"], Decimal("0"))
+        self.assertEqual(exercises_payload[0]["sets"][2]["reps"], 6)
+
+    def test_parse_entries_can_validate_without_creating_missing_exercise(self) -> None:
+        exercises_payload, errors = parse_entries(
+            ["3x10 Seated Cable Row 50kg"],
+            allow_create_missing=False,
+        )
+
+        self.assertFalse(exercises_payload)
+        self.assertEqual(
+            errors,
+            ["3x10 Seated Cable Row 50kg: Unknown exercise 'Seated Cable Row'."],
+        )

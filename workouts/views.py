@@ -19,6 +19,9 @@ from .services import calculate_tonnage, count_sets_by_muscle_group, get_best_se
 def _parse_iso_value(raw_value: Optional[str]) -> Optional[date | datetime]:
     if not raw_value:
         return None
+    raw_value = raw_value.strip()
+    if "T" not in raw_value and " " not in raw_value:
+        return parse_date(raw_value)
     dt = parse_datetime(raw_value)
     if dt:
         if timezone.is_naive(dt):

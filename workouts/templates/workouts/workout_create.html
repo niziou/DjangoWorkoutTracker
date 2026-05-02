@@ -43,8 +43,29 @@
       </div>
 
       <div class="field">
+        <label for="photo_import">Photo import</label>
+        <input type="file" id="photo_import" accept="image/*" x-ref="photoInput">
+        <div class="muted">Upload a notebook photo and convert it into draft entries for review.</div>
+        <div style="margin-top: 10px;">
+          <button class="btn secondary" type="button" @click="importPhoto()" :disabled="importing">Parse photo</button>
+          <span class="muted" x-show="importing">Parsing photo...</span>
+        </div>
+      </div>
+
+      <div class="error" x-show="importError" x-text="importError"></div>
+
+      <div class="field" x-show="importWarnings.length">
+        <label>Import warnings</label>
+        <ul style="margin-top: 8px; padding-left: 20px;">
+          <template x-for="(warning, index) in importWarnings" :key="`warning-${index}`">
+            <li x-text="warning"></li>
+          </template>
+        </ul>
+      </div>
+
+      <div class="field">
         <label>Quick entries</label>
-        <div class="muted">Format: <code>3x5 bench press 75kg</code> or <code>3x30s hollow hold</code></div>
+        <div class="muted">Format: <code>3x5 bench press 75kg</code>, <code>3x30s hollow hold</code>, or <code>bench press: 20kg x 5, 40kg x 5, 60kg x 5</code></div>
       </div>
 
       <template x-for="(entry, index) in entries" :key="index">
@@ -61,6 +82,7 @@
       <button class="btn secondary" type="button" @click="addRow()">+ Add row</button>
 
       <input type="hidden" name="entries_json" :value="JSON.stringify(entries)">
+      <input type="hidden" name="import_warnings_json" :value="JSON.stringify(importWarnings)">
 
       <div style="margin-top: 16px;">
         <button class="btn" type="submit">Save workout</button>
@@ -90,6 +112,9 @@
         trainingType: initial.training_type || "",
         notes: initial.notes || "",
         entries: Array.isArray(initial.entries) && initial.entries.length ? initial.entries : [""],
+        importWarnings: Array.isArray(initial.import_warnings) ? initial.import_warnings : [],
+        importing: false,
+        importError: "",
         saving: false,
         lastSavedAt: null,
         saveTimer: null,
@@ -105,6 +130,7 @@
           this.$watch("trainingType", () => this.queueSave());
           this.$watch("notes", () => this.queueSave());
           this.$watch("entries", () => this.queueSave(), { deep: true });
+          this.$watch("importWarnings", () => this.queueSave(), { deep: true });
           window.addEventListener("online", () => this.saveDraft());
         },
         hasServerDraft() {
@@ -116,6 +142,7 @@
           this.trainingType = draft.training_type || this.trainingType;
           this.notes = draft.notes || this.notes;
           this.entries = Array.isArray(draft.entries) && draft.entries.length ? draft.entries : this.entries;
+          this.importWarnings = Array.isArray(draft.import_warnings) ? draft.import_warnings : this.importWarnings;
         },
         addRow() {
           this.entries.push("");
@@ -126,9 +153,57 @@
             this.entries.push("");
           }
         },
+        hasMeaningfulEntries() {
+          return this.entries.some((entry) => typeof entry === "string" && entry.trim() !== "");
+        },
         queueSave() {
           clearTimeout(this.saveTimer);
           this.saveTimer = setTimeout(() => this.saveDraft(), 500);
+        },
+        async importPhoto() {
+          const file = this.$refs.photoInput?.files?.[0];
+          if (!file) {
+            this.importError = "Choose a photo before starting the import.";
+            return;
+          }
+          if (this.hasMeaningfulEntries()) {
+            const shouldReplace = window.confirm("Replace current entries with the parsed photo result?");
+            if (!shouldReplace) {
+              return;
+            }
+          }
+
+          this.importError = "";
+          this.importing = true;
+          const formData = new FormData();
+          formData.append("photo", file);
+
+          try {
+            const response = await fetch("{% url 'workout-import-photo' %}", {
+              method: "POST",
+              headers: {
+                "X-CSRFToken": getCookie("csrftoken"),
+              },
+              body: formData,
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+              this.importError = payload.detail || "Photo import failed.";
+              return;
+            }
+
+            this.entries = Array.isArray(payload.entries) && payload.entries.length ? payload.entries : [""];
+            this.importWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+            this.lastSavedAt = null;
+            this.queueSave();
+          } catch (error) {
+            this.importError = "Photo import failed. Please try again.";
+          } finally {
+            this.importing = false;
+            if (this.$refs.photoInput) {
+              this.$refs.photoInput.value = "";
+            }
+          }
         },
         async saveDraft() {
           const payload = {
@@ -137,6 +212,7 @@
             training_type: this.trainingType,
             notes: this.notes,
             entries: this.entries,
+            import_warnings: this.importWarnings,
           };
           saveLocalDraft(payload);
           this.saving = true;
